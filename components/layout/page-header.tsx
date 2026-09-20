@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ShieldCheck, Sun, Moon, ArrowRight, Activity, Terminal } from "lucide-react";
+import { Sun, Moon, ArrowRight, Activity, Terminal } from "lucide-react";
 import { navigation } from "@/data/navigation";
 import { Theme } from "@/lib/type";
 import { useApiHealth } from "@/hooks/use-api-health";
+import Image from "next/image";
 
 export function Header() {
   const pathname = usePathname();
@@ -27,13 +28,20 @@ export function Header() {
   };
 
   return (
+    
     <header className="topbar">
       <div className="flex items-center gap-4">
         <Link className="brand" href="/" aria-label="BotSentinel home">
           <span className="brand-mark">
-            <ShieldCheck size={18} aria-hidden="true" />
+            <Image
+              src="/botsentinel.png"
+              alt="BotSentinel Logo"
+              width={18}
+              height={18}
+              aria-hidden="true"
+            />
           </span>
-          <span>
+          <span className="brand-name">
             Bot<span>Sentinel</span>
           </span>
         </Link>
