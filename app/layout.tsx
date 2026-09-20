@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Footer } from "@/components/layout/footer";
 import { Header } from "@/components/layout/page-header";
+import { AnalysisProvider } from "@/contexts/analysis-context";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,13 +34,16 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-screen bg-background text-foreground">
-        <div className="app-shell">
-          <Header />
-          {children}
-          <Footer />
-        </div>
+      <body className="min-h-screen">
+        <AnalysisProvider>
+          <div className="app-shell">
+            <Header />
+            {children}
+            <Footer />
+          </div>
+        </AnalysisProvider>
       </body>
     </html>
   );
 }
+

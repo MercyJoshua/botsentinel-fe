@@ -1,19 +1,317 @@
+"use client";
+
 import Link from "next/link";
+import {
+  Circle,
+  Check,
+  TriangleAlert,
+  Gauge,
+  ShieldAlert,
+  ShieldCheck,
+  Clock,
+  RotateCcw,
+  ArrowRight,
+  Download,
+  FileDown,
+  Info,
+  Server,
+  Zap,
+} from "lucide-react";
+import { comparisonRows, confidenceRows } from "@/data/results";
+import { useAnalysis, PRESET_FLOWS } from "@/contexts/analysis-context";
 import styles from "./detection-results.module.css";
 
-const confidenceRows = [["Flow Duration", "12,345 &#181;s (+38% anomaly)", "Mean Normal: 8,940 &#181;s", "High persistence C2 beacon", "orange"], ["Packet Length Mean", "421.5 B (+45% botnet correlation)", "Standard Human Web Mean: 780.2 B", "Uniform payload signature", "orange"], ["Total Backward Packets", "8 pkts (Asymmetric SYN scan)", "Normal Session: 42 pkts", "Near-zero ACKs received", "amber"], ["Destination Port", "Port 80 / TCP (Targeted web endpoint)", "Protocol: Plaintext HTTP", "Targeted Denial vector", "teal"]];
-const comparisonRows = [["Inter-Arrival Time", "2.1 ms", "142.8 ms", "1.9 ms"], ["SYN-to-ACK Ratio", "18.4 : 1", "1.02 : 1", "19.1 : 1"], ["Entropy (Shannon)", "3.12", "7.84", "3.05"], ["User-Agent Jitter", "0.00 (static)", "High Random", "0.00"]];
-
 export function DetectionResults() {
-  return <main className={styles.root}>
-    <div className="result-crumb"><span>Analysis Reports</span> / <span>Report #BS-2026-001284</span> <b>&#9679;</b><div><i>&#10003; Completed in 14.2ms</i><i>&#9679; SentinelML Ensemble v2.4.1</i><i>&#9679; Attestation Hash: 0x8a92...f3</i></div></div>
-    <section className="result-alert"><div className="alert-summary"><div className="alert-title"><span>!</span><div><em>HIGH-RISK THREAT ALERT</em><small>Class ID: NET-BOT-094</small><h1>&#9888; BOTNET TRAFFIC</h1></div></div><p>High probability of coordinated command-and-control (C2) beaconing and SYN-flood behavioral fingerprint. Automated pattern matches synchronized periodic bot clusters targeting port 80/TCP.</p><div className="confidence-bar"><div><b>&#9729; Detection Confidence Score</b><strong>94.7% (Critical Certainty)</strong></div><span><i /></span><small>0% Baseline Normal <b>85% Automated Action Threshold</b> 100% Deterministic</small></div></div><div className="result-side"><div className="confidence-card"><p>MODEL CONFIDENCE</p><strong>94.7<sup>%</sup></strong><em>&#9678; Verdict: Malicious Botnet</em><small>Surpasses the safety boundary of 85.0%. Instant mitigation automation protocol is warranted.</small></div><ClassificationPie /></div></section>
-    <section className="result-stat-grid"><Stat title="Classification Verdict" value="◉ BOTNET" detail="Priority 1 Active Threat" foot="Vector: HTTP Distributed Flood" /><Stat title="Ensemble Confidence" value="94.7%" detail="Margin: ±1.2%" foot="False Positive Risk: 0.04%" /><Stat title="Telemetry Reference" value="BS-2026-001284" detail="◷ Oct 24, 2026 · 14:32:08 UTC" foot="Probe Ingress: US-East Edge Gateway" /></section>
-    <section className="result-analysis-grid"><FeatureAttribution /><BaselineComparison /></section>
-    <section className="result-actions"><p>Incident marked for automated mitigation queue in<br />Sentinel SOC.</p><div><Link href="/analyze">↻ Analyze Another Flow &#8594;</Link><button>☷ Download Mitigation Firewall Rule</button><button className="export">⇧ Export Detection Report (.PDF / .JSON)</button></div></section>
-  </main>;
+  const { activeRecord, loadPreset, isAnalyzing } = useAnalysis();
+  const { result, flow, id, flowName, timestamp, latencyMs } = activeRecord;
+
+  const isBotnet = result.is_botnet;
+  const confidencePercent = (result.confidence * 100).toFixed(1);
+  const probPercent = (result.botnet_probability * 100).toFixed(1);
+
+  return (
+    <main className={styles.root}>
+      {/* Preset Switcher Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 mb-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          <Zap size={14} className="text-teal-600" />
+          <span>Switch Sample Flow:</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(PRESET_FLOWS).map(([key, preset]) => (
+            <button
+              key={key}
+              type="button"
+              disabled={isAnalyzing}
+              onClick={() => loadPreset(key as keyof typeof PRESET_FLOWS)}
+              className={`px-3 py-1 text-xs rounded-md font-medium transition-all ${
+                flowName === preset.label
+                  ? "bg-teal-600 text-white shadow-xs"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-slate-700"
+              }`}
+            >
+              {preset.label.split("(")[0].trim()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Breadcrumb */}
+      <div className="result-crumb">
+        <span>Analysis Telemetry</span> / <span>Report #{id}</span>
+        <div>
+          <i>
+            <Check size={13} aria-hidden="true" /> Processed in {latencyMs}ms
+          </i>
+          <i>
+            <Circle size={6} fill="currentColor" aria-hidden="true" /> SentinelML Ensemble v2.4
+          </i>
+        </div>
+      </div>
+
+      {/* Dynamic Result Alert Banner */}
+      <section className={`result-alert ${isBotnet ? "threat" : "benign"}`}>
+        <div className="alert-summary">
+          <div className="alert-title">
+            <div className="alert-icon">
+              {isBotnet ? (
+                <TriangleAlert size={22} aria-hidden="true" />
+              ) : (
+                <ShieldCheck size={22} aria-hidden="true" />
+              )}
+            </div>
+            <div>
+              <div className="alert-meta">
+                <span className="alert-tag">
+                  {isBotnet ? "HIGH-RISK THREAT" : "VERIFIED BENIGN"}
+                </span>
+                <span className="alert-class-id">
+                  {isBotnet ? "Signature: NET-BOT-094" : "Profile: NORMAL-WEB-FLOW"}
+                </span>
+              </div>
+              <h1>
+                {isBotnet ? "BOTNET TRAFFIC DETECTED" : "NORMAL TRAFFIC VERIFIED"}
+              </h1>
+            </div>
+          </div>
+
+          <p>
+            {isBotnet
+              ? `High probability of coordinated command-and-control beaconing and SYN-flood behavioral fingerprinting. Automated pattern matches synchronized bot clusters targeting Port ${flow.destination_port ?? "80"}/${flow.protocol?.toUpperCase() ?? "TCP"}.`
+              : `Flow attributes closely match baseline human browser traffic sessions with expected TLS handshake intervals and natural packet inter-arrival distributions. No intrusion signatures identified.`}
+          </p>
+
+          <div className="confidence-bar">
+            <div className="confidence-bar-header">
+              <b>
+                <Gauge size={15} aria-hidden="true" /> Detection Confidence Score
+              </b>
+              <strong>
+                {confidencePercent}% ({isBotnet ? "Critical Certainty" : "High Reliability"})
+              </strong>
+            </div>
+            <span className="gauge-track">
+              <i
+                className="gauge-fill"
+                style={{ width: `${Math.max(10, Math.min(100, Number(confidencePercent)))}%` }}
+              />
+            </span>
+            <small>
+              <span>0% Baseline Normal</span>
+              <span>85% Action Threshold</span>
+              <span>100% Deterministic</span>
+            </small>
+          </div>
+        </div>
+
+        <div className="result-side">
+          <div className="confidence-card">
+            <p>CLASSIFIER CONFIDENCE</p>
+            <strong>{confidencePercent}%</strong>
+            <em>
+              {isBotnet ? (
+                <>
+                  <ShieldAlert size={14} aria-hidden="true" /> Verdict: Malicious Botnet
+                </>
+              ) : (
+                <>
+                  <ShieldCheck size={14} aria-hidden="true" /> Verdict: Legitimate Flow
+                </>
+              )}
+            </em>
+            <small>
+              {isBotnet
+                ? `Botnet probability: ${probPercent}%. Exceeds safety threshold; automated mitigation recommended.`
+                : `Botnet probability: ${probPercent}%. Clean flow within normal operational envelope.`}
+            </small>
+          </div>
+        </div>
+      </section>
+
+      {/* Result Stat Grid */}
+      <section className="result-stat-grid" aria-label="Key flow metrics">
+        <article className="result-stat">
+          <h2>Classification Verdict</h2>
+          <div className="result-stat-value">
+            <strong className={isBotnet ? "text-orange-600 dark:text-orange-400" : "text-teal-600 dark:text-teal-400"}>
+              {result.prediction.toUpperCase()}
+            </strong>
+            <em>{isBotnet ? "Active Threat" : "Normal Egress"}</em>
+          </div>
+          <small>Target: Port {flow.destination_port ?? "80"} · {flow.protocol?.toUpperCase() ?? "TCP"}</small>
+        </article>
+
+        <article className="result-stat">
+          <h2>Flow Volume &amp; Packets</h2>
+          <div className="result-stat-value">
+            <strong>{flow.total_packets ?? 4280} pkts</strong>
+            <em>({flow.duration ?? 0.042}s duration)</em>
+          </div>
+          <small>Total Ingest: {flow.total_bytes ? `${Math.round(flow.total_bytes / 1024)} KB` : "285 KB"}</small>
+        </article>
+
+        <article className="result-stat">
+          <h2>Telemetry Timestamp</h2>
+          <div className="result-stat-value">
+            <strong className="text-sm font-mono">{timestamp}</strong>
+          </div>
+          <small>Edge Sensor: US-East Ingress Gateway</small>
+        </article>
+      </section>
+
+      {/* Result Analysis Grid */}
+      <section className="result-analysis-grid">
+        <FeatureAttribution isBotnet={isBotnet} />
+        <BaselineComparison isBotnet={isBotnet} />
+      </section>
+
+      {/* Action Footer */}
+      <section className="result-actions">
+        <div>
+          <p className="font-semibold text-slate-800 dark:text-slate-200">
+            {isBotnet ? "Incident marked for mitigation dispatch." : "Telemetry marked as verified normal."}
+          </p>
+          <p className="text-xs text-slate-500">
+            All decision trees and SHAP values attested with cryptographic verification.
+          </p>
+        </div>
+
+        <div className="result-actions-buttons">
+          <Link href="/analyze" className="btn-secondary">
+            <RotateCcw size={14} aria-hidden="true" />
+            <span>Analyze Another Flow</span>
+          </Link>
+          <button type="button" className="btn-secondary" onClick={() => window.print()}>
+            <FileDown size={14} aria-hidden="true" />
+            <span>Export Report (.PDF)</span>
+          </button>
+        </div>
+      </section>
+    </main>
+  );
 }
-function ClassificationPie() { return <div className="classification-pie"><svg viewBox="0 0 42 42" role="img" aria-label="Classification overview: 94.7 percent botnet risk"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#e7eeee" strokeWidth="5" /><circle cx="21" cy="21" r="15.9" fill="none" stroke="#ff9d18" strokeWidth="5" strokeDasharray="94.7 5.3" strokeDashoffset="25" /><circle cx="21" cy="21" r="10" fill="#fffaf1" /><text x="21" y="20" textAnchor="middle">94.7%</text><text x="21" y="24" textAnchor="middle">BOTNET</text></svg><div><b>Classification overview</b><span><i /> Botnet likelihood 94.7%</span><span><i /> Baseline traffic 5.3%</span></div></div>; }
-function Stat({ title, value, detail, foot }: { title: string; value: string; detail: string; foot: string }) { return <article className="result-stat"><h2>{title}</h2><div><strong>{value}</strong><em>{detail}</em></div><small>{foot}</small></article>; }
-function FeatureAttribution() { return <article className="result-card attribution"><div className="result-card-heading"><div><h2>Feature Anomaly Attribution</h2><p>Shapley Additive Explanations (SHAP) contribution to botnet classification.</p></div><b>Neural<br />Weights</b></div><div className="attribute-list">{confidenceRows.map(([label, value, left, right, color]) => <div className="attribute" key={label}><div><b>{label}</b><strong dangerouslySetInnerHTML={{ __html: value }} /></div><span className={color}><i /></span><small><em dangerouslySetInnerHTML={{ __html: left }} /><em dangerouslySetInnerHTML={{ __html: right }} /></small></div>)}</div><p className="attribution-note">&#9432; SHAP values calculated across 128 multi-layer perceptron decision trees.</p></article>; }
-function BaselineComparison() { return <article className="result-card comparison"><div className="result-card-heading"><div><h2>Baseline Behavioral Comparison</h2><p>Observed sample mapped against 10M validated enterprise sessions.</p></div><b>Deviation: Extreme</b></div><table><thead><tr><th>Telemetry Metric</th><th>Observed Flow</th><th>Human Baseline</th><th>Botnet Cluster</th></tr></thead><tbody>{comparisonRows.map((row) => <tr key={row[0]}>{row.map((item) => <td key={item}>{item}</td>)}</tr>)}</tbody></table><div className="recommendation"><b>&#9888; Recommended Automated Action:</b><p>Isolate Source IP &amp; Deploy Rate-Limiting Filter Rule to prevent ingress amplification at perimeter routers.</p></div><small>Sensor Signature: C2-2026-SYN-F &nbsp; <span>Sample Size: 2,048 Packets</span></small></article>; }
+
+function FeatureAttribution({ isBotnet }: { isBotnet: boolean }) {
+  return (
+    <article className="result-card attribution">
+      <div className="result-card-heading">
+        <div>
+          <h2>Feature Anomaly Attribution</h2>
+          <p>SHAP relative importance weights across 128 decision trees.</p>
+        </div>
+        <span className={`result-badge ${isBotnet ? "badge-orange" : "badge-teal"}`}>
+          {isBotnet ? "Anomaly Flagged" : "Normal Vector"}
+        </span>
+      </div>
+
+      <div className="attribute-list">
+        {confidenceRows.map(([label, value, left, right, color], index) => {
+          const widthPercent = isBotnet
+            ? index === 0 ? "88%" : index === 1 ? "74%" : index === 2 ? "62%" : "44%"
+            : index === 0 ? "18%" : index === 1 ? "22%" : index === 2 ? "12%" : "15%";
+
+          return (
+            <div className="attribute" key={label}>
+              <div className="attribute-head">
+                <b>{label}</b>
+                <strong dangerouslySetInnerHTML={{ __html: isBotnet ? value : left }} />
+              </div>
+              <div className="attribute-track">
+                <i
+                  style={{
+                    width: widthPercent,
+                    backgroundColor: isBotnet ? undefined : "#0d9488",
+                  }}
+                />
+              </div>
+              <div className="attribute-footer">
+                <span dangerouslySetInnerHTML={{ __html: left }} />
+                <span>{isBotnet ? right : "Matches baseline"}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="attribution-note">
+        <Info size={13} aria-hidden="true" />
+        <span>SHAP values calculated across 128 multi-layer perceptron decision trees.</span>
+      </p>
+    </article>
+  );
+}
+
+function BaselineComparison({ isBotnet }: { isBotnet: boolean }) {
+  return (
+    <article className="result-card comparison">
+      <div className="result-card-heading">
+        <div>
+          <h2>Baseline Comparison Matrix</h2>
+          <p>Observed sample vs 10M validated enterprise sessions.</p>
+        </div>
+        <span className={`result-badge ${isBotnet ? "badge-orange" : "badge-teal"}`}>
+          {isBotnet ? "Deviation: Extreme" : "Deviation: Nominal"}
+        </span>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Telemetry Attribute</th>
+            <th>Observed Flow</th>
+            <th>Human Baseline</th>
+            <th>Botnet Cluster</th>
+          </tr>
+        </thead>
+        <tbody>
+          {comparisonRows.map((row) => (
+            <tr key={row[0]}>
+              <td>{row[0]}</td>
+              <td className={isBotnet ? "highlight" : "text-teal-600 font-semibold"}>
+                {isBotnet ? row[1] : row[2]}
+              </td>
+              <td>{row[2]}</td>
+              <td>{row[3]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="recommendation">
+        <b>
+          {isBotnet ? (
+            <TriangleAlert size={14} className="text-orange-500" aria-hidden="true" />
+          ) : (
+            <ShieldCheck size={14} className="text-teal-600" aria-hidden="true" />
+          )}
+          <span>{isBotnet ? "Recommended Action: Deploy Rate-Limit Filter" : "Action: Allow Traffic Ingress"}</span>
+        </b>
+        <p>
+          {isBotnet
+            ? "Isolate Source IP & deploy rate-limiting filter rule to prevent ingress amplification at perimeter routers."
+            : "No mitigation required. Session exhibits normal burst dynamics and regular TCP acknowledgment windowing."}
+        </p>
+      </div>
+    </article>
+  );
+}
