@@ -85,9 +85,6 @@ export function OverviewDashboard() {
             ) : (
               <small className={"tone" in metric ? metric.tone : undefined}>
                 {"detail" in metric && metric.detail}
-                {metric.label === "AVG. CONFIDENCE" && (
-                  <span className="confidence-detail">σ = 0.018</span>
-                )}
               </small>
             )}
           </article>
