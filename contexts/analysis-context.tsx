@@ -2,36 +2,36 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { predictTraffic } from "@/lib/api";
-import { PredictionLabel, type AnalysisRecord, type PredictionResponse, type TrafficFlow } from "@/lib/type";
+import { PredictionLabel, type AnalysisRecord, type TrafficFlow } from "@/lib/type";
 
 export const PRESET_FLOWS: Record<string, { label: string; flow: TrafficFlow; expectedVerdict: PredictionLabel }> = {
-  mirai_botnet: {
-    label: "Mirai Botnet SYN-Flood (Port 80)",
+  rbot_flood: {
+    label: "CTU-13 Scenario 10: Rbot DDoS Flood",
     expectedVerdict: PredictionLabel.Botnet,
     flow: {
-      duration: 0.042,
-      protocol: "tcp",
-      source_port: 54128,
-      direction: "outbound",
-      destination_port: 80,
-      connection_state: "SF",
+      duration: 0.0,
+      protocol: "icmp",
+      source_port: 1045,
+      direction: "->",
+      destination_port: 0,
+      connection_state: "UNK",
       source_tos: 0,
       destination_tos: 0,
-      total_packets: 4280,
-      total_bytes: 285400,
-      source_bytes: 285400,
+      total_packets: 1,
+      total_bytes: 1066,
+      source_bytes: 1066,
     },
   },
   benign_tls: {
-    label: "Legitimate User HTTPS Session (Port 443)",
+    label: "CTU-13 Scenario 13: Normal User Web Session",
     expectedVerdict: PredictionLabel.NonBotnet,
     flow: {
       duration: 14.85,
       protocol: "tcp",
       source_port: 52190,
-      direction: "inbound",
+      direction: "<-",
       destination_port: 443,
-      connection_state: "SF",
+      connection_state: "CON",
       source_tos: 0,
       destination_tos: 0,
       total_packets: 84,
@@ -39,34 +39,34 @@ export const PRESET_FLOWS: Record<string, { label: string; flow: TrafficFlow; ex
       source_bytes: 18400,
     },
   },
-  dns_tunnel: {
-    label: "Anomalous DNS Exfiltration Probe (Port 53)",
+  dns_probe: {
+    label: "CTU-13 Scenario 9: Botnet C&C Probe (Port 53)",
     expectedVerdict: PredictionLabel.Botnet,
     flow: {
-      duration: 0.12,
-      protocol: "udp",
-      source_port: 49152,
-      direction: "outbound",
+      duration: 10.0,
+      protocol: "icmp",
+      source_port: 1045,
+      direction: "->",
       destination_port: 53,
-      connection_state: "OTH",
+      connection_state: "UNK",
       source_tos: 0,
       destination_tos: 0,
-      total_packets: 1940,
-      total_bytes: 165000,
-      source_bytes: 165000,
+      total_packets: 10,
+      total_bytes: 50000,
+      source_bytes: 50000,
     },
   },
 };
 
 const DEFAULT_RECORD: AnalysisRecord = {
   id: "BS-2026-001284",
-  flowName: "Mirai Botnet SYN-Flood (Port 80)",
-  flow: PRESET_FLOWS.mirai_botnet.flow,
+  flowName: "CTU-13 Scenario 10: Rbot DDoS Flood",
+  flow: PRESET_FLOWS.rbot_flood.flow,
   result: {
     prediction: PredictionLabel.Botnet,
     is_botnet: true,
-    botnet_probability: 0.947,
-    confidence: 0.947,
+    botnet_probability: 0.87,
+    confidence: 0.87,
   },
   timestamp: "Oct 24, 2026 · 14:32:08 UTC",
   latencyMs: 14.2,
