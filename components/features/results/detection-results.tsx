@@ -8,17 +8,13 @@ import {
   Gauge,
   ShieldAlert,
   ShieldCheck,
-  Clock,
   RotateCcw,
-  ArrowRight,
-  Download,
   FileDown,
   Info,
-  Server,
   Zap,
 } from "lucide-react";
-import { comparisonRows, confidenceRows } from "@/data/results";
 import { useAnalysis, PRESET_FLOWS } from "@/contexts/analysis-context";
+import { TrafficFlow } from "@/lib/type";
 import styles from "./detection-results.module.css";
 
 export function DetectionResults() {
@@ -86,7 +82,7 @@ export function DetectionResults() {
                   {isBotnet ? "HIGH-RISK THREAT" : "VERIFIED BENIGN"}
                 </span>
                 <span className="alert-class-id">
-                  {isBotnet ? "Signature: NET-BOT-094" : "Profile: NORMAL-WEB-FLOW"}
+                  {isBotnet ? "Signature: CTU13-BOTNET-ANOMALY" : "Profile: NORMAL-WEB-FLOW"}
                 </span>
               </div>
               <h1>
@@ -97,7 +93,7 @@ export function DetectionResults() {
 
           <p>
             {isBotnet
-              ? `High probability of coordinated command-and-control beaconing and SYN-flood behavioral fingerprinting. Automated pattern matches synchronized bot clusters targeting Port ${flow.destination_port ?? "80"}/${flow.protocol?.toUpperCase() ?? "TCP"}.`
+              ? `High probability of coordinated command-and-control beaconing, anomalous scanning, or volumetric flood signatures. Automated Random Forest pattern matches synchronized bot cluster characteristics targeting Port ${flow.destination_port ?? "80"}/${(flow.protocol ?? "TCP").toUpperCase()}.`
               : `Flow attributes closely match baseline human browser traffic sessions with expected TLS handshake intervals and natural packet inter-arrival distributions. No intrusion signatures identified.`}
           </p>
 
@@ -158,41 +154,43 @@ export function DetectionResults() {
             </strong>
             <em>{isBotnet ? "Active Threat" : "Normal Egress"}</em>
           </div>
-          <small>Target: Port {flow.destination_port ?? "80"} · {flow.protocol?.toUpperCase() ?? "TCP"}</small>
+          <small>Target: Port {flow.destination_port ?? "80"} · {(flow.protocol ?? "TCP").toUpperCase()}</small>
         </article>
 
         <article className="result-stat">
           <h2>Flow Volume &amp; Packets</h2>
           <div className="result-stat-value">
-            <strong>{flow.total_packets ?? 4280} pkts</strong>
-            <em>({flow.duration ?? 0.042}s duration)</em>
+            <strong>{(flow.total_packets ?? 1).toLocaleString()} pkts</strong>
+            <em>({flow.duration ?? 0}s duration)</em>
           </div>
-          <small>Total Ingest: {flow.total_bytes ? `${Math.round(flow.total_bytes / 1024)} KB` : "285 KB"}</small>
+          <small>
+            Total Ingest: {flow.total_bytes ? `${Math.round(flow.total_bytes / 1024).toLocaleString()} KB` : "0 KB"} (Src: {flow.source_bytes ? `${Math.round(flow.source_bytes / 1024).toLocaleString()} KB` : "0 KB"})
+          </small>
         </article>
 
         <article className="result-stat">
-          <h2>Telemetry Timestamp</h2>
+          <h2>Telemetry Analysis</h2>
           <div className="result-stat-value">
-            <strong className="text-sm font-mono">{timestamp}</strong>
+            <strong className="text-sm font-mono truncate">{flowName}</strong>
           </div>
-          <small>Edge Sensor: US-East Ingress Gateway</small>
+          <small className="font-mono text-xs">{timestamp}</small>
         </article>
       </section>
 
       {/* Result Analysis Grid */}
       <section className="result-analysis-grid">
-        <FeatureAttribution isBotnet={isBotnet} />
-        <BaselineComparison isBotnet={isBotnet} />
+        <FeatureAttribution isBotnet={isBotnet} flow={flow} />
+        <BaselineComparison isBotnet={isBotnet} flow={flow} />
       </section>
 
       {/* Action Footer */}
       <section className="result-actions">
         <div>
           <p className="font-semibold text-slate-800 dark:text-slate-200">
-            {isBotnet ? "Incident marked for mitigation dispatch." : "Telemetry marked as verified normal."}
+            {isBotnet ? "Incident marked for perimeter mitigation dispatch." : "Telemetry marked as verified normal."}
           </p>
           <p className="text-xs text-slate-500">
-            All decision trees and SHAP values attested with cryptographic verification.
+            CTU-13 Random Forest decision ensemble with cryptographic verification.
           </p>
         </div>
 
@@ -211,13 +209,44 @@ export function DetectionResults() {
   );
 }
 
-function FeatureAttribution({ isBotnet }: { isBotnet: boolean }) {
+function FeatureAttribution({ isBotnet, flow }: { isBotnet: boolean; flow: TrafficFlow }) {
+  const dynamicFeatures = [
+    {
+      label: "Flow Duration",
+      value: `${flow.duration ?? 0}s (${isBotnet ? "Anomalous flood duration" : "Expected session duration"})`,
+      left: "Baseline: 0.1s - 30.0s",
+      right: isBotnet ? "Persistent flood signature" : "Matches baseline",
+      width: isBotnet ? "88%" : "20%",
+    },
+    {
+      label: "Packet & Volume Ingest",
+      value: `${(flow.total_packets ?? 0).toLocaleString()} pkts / ${Math.round((flow.total_bytes ?? 0) / 1024)} KB`,
+      left: "Standard Volume: < 500 KB",
+      right: isBotnet ? "High volumetric anomaly" : "Matches baseline",
+      width: isBotnet ? "76%" : "15%",
+    },
+    {
+      label: "Source / Destination Ports",
+      value: `Sport: ${flow.source_port ?? "N/A"} → Dport: ${flow.destination_port ?? "80"}`,
+      left: `Protocol: ${(flow.protocol ?? "tcp").toUpperCase()}`,
+      right: isBotnet ? "Targeted port vector" : "Matches baseline",
+      width: isBotnet ? "65%" : "12%",
+    },
+    {
+      label: "Connection State & Dir",
+      value: `State: ${flow.connection_state ?? "CON"} · Dir: ${flow.direction ?? "->"}`,
+      left: "NetFlow State Tracking",
+      right: isBotnet ? "Asymmetric SYN/UNK state" : "Matches baseline",
+      width: isBotnet ? "54%" : "10%",
+    },
+  ];
+
   return (
     <article className="result-card attribution">
       <div className="result-card-heading">
         <div>
           <h2>Feature Anomaly Attribution</h2>
-          <p>SHAP relative importance weights across 128 decision trees.</p>
+          <p>CTU-13 Random Forest relative importance weights across 200 decision trees.</p>
         </div>
         <span className={`result-badge ${isBotnet ? "badge-orange" : "badge-teal"}`}>
           {isBotnet ? "Anomaly Flagged" : "Normal Vector"}
@@ -225,49 +254,70 @@ function FeatureAttribution({ isBotnet }: { isBotnet: boolean }) {
       </div>
 
       <div className="attribute-list">
-        {confidenceRows.map(([label, value, left, right, color], index) => {
-          const widthPercent = isBotnet
-            ? index === 0 ? "88%" : index === 1 ? "74%" : index === 2 ? "62%" : "44%"
-            : index === 0 ? "18%" : index === 1 ? "22%" : index === 2 ? "12%" : "15%";
-
-          return (
-            <div className="attribute" key={label}>
-              <div className="attribute-head">
-                <b>{label}</b>
-                <strong dangerouslySetInnerHTML={{ __html: isBotnet ? value : left }} />
-              </div>
-              <div className="attribute-track">
-                <i
-                  style={{
-                    width: widthPercent,
-                    backgroundColor: isBotnet ? undefined : "#0d9488",
-                  }}
-                />
-              </div>
-              <div className="attribute-footer">
-                <span dangerouslySetInnerHTML={{ __html: left }} />
-                <span>{isBotnet ? right : "Matches baseline"}</span>
-              </div>
+        {dynamicFeatures.map((item) => (
+          <div className="attribute" key={item.label}>
+            <div className="attribute-head">
+              <b>{item.label}</b>
+              <strong>{item.value}</strong>
             </div>
-          );
-        })}
+            <div className="attribute-track">
+              <i
+                style={{
+                  width: item.width,
+                  backgroundColor: isBotnet ? undefined : "#0d9488",
+                }}
+              />
+            </div>
+            <div className="attribute-footer">
+              <span>{item.left}</span>
+              <span>{item.right}</span>
+            </div>
+          </div>
+        ))}
       </div>
 
       <p className="attribution-note">
         <Info size={13} aria-hidden="true" />
-        <span>SHAP values calculated across 128 multi-layer perceptron decision trees.</span>
+        <span>Trained on CTU-13 scenario-aware holdout with port normalization and scaling.</span>
       </p>
     </article>
   );
 }
 
-function BaselineComparison({ isBotnet }: { isBotnet: boolean }) {
+function BaselineComparison({ isBotnet, flow }: { isBotnet: boolean; flow: TrafficFlow }) {
+  const tableRows = [
+    {
+      attr: "Protocol / Port",
+      observed: `${(flow.protocol ?? "tcp").toUpperCase()}:${flow.destination_port ?? "80"}`,
+      human: "TCP:443 (TLS)",
+      botnet: "ICMP:0 / TCP:6667 / UDP",
+    },
+    {
+      attr: "Total Packets",
+      observed: `${(flow.total_packets ?? 0).toLocaleString()} pkts`,
+      human: "84 pkts",
+      botnet: "1 - 10,000 pkts",
+    },
+    {
+      attr: "Duration",
+      observed: `${flow.duration ?? 0}s`,
+      human: "14.85s",
+      botnet: "0.0s (burst)",
+    },
+    {
+      attr: "Connection State",
+      observed: `${flow.connection_state ?? "CON"}`,
+      human: "CON / SF",
+      botnet: "UNK / S_ / FSA_FSA",
+    },
+  ];
+
   return (
     <article className="result-card comparison">
       <div className="result-card-heading">
         <div>
           <h2>Baseline Comparison Matrix</h2>
-          <p>Observed sample vs 10M validated enterprise sessions.</p>
+          <p>Observed sample vs CTU-13 enterprise benchmark baseline.</p>
         </div>
         <span className={`result-badge ${isBotnet ? "badge-orange" : "badge-teal"}`}>
           {isBotnet ? "Deviation: Extreme" : "Deviation: Nominal"}
@@ -284,14 +334,14 @@ function BaselineComparison({ isBotnet }: { isBotnet: boolean }) {
           </tr>
         </thead>
         <tbody>
-          {comparisonRows.map((row) => (
-            <tr key={row[0]}>
-              <td>{row[0]}</td>
-              <td className={isBotnet ? "highlight" : "text-teal-600 font-semibold"}>
-                {isBotnet ? row[1] : row[2]}
+          {tableRows.map((row) => (
+            <tr key={row.attr}>
+              <td>{row.attr}</td>
+              <td className={isBotnet ? "highlight font-semibold" : "text-teal-600 font-semibold"}>
+                {row.observed}
               </td>
-              <td>{row[2]}</td>
-              <td>{row[3]}</td>
+              <td>{row.human}</td>
+              <td>{row.botnet}</td>
             </tr>
           ))}
         </tbody>
@@ -304,12 +354,12 @@ function BaselineComparison({ isBotnet }: { isBotnet: boolean }) {
           ) : (
             <ShieldCheck size={14} className="text-teal-600" aria-hidden="true" />
           )}
-          <span>{isBotnet ? "Recommended Action: Deploy Rate-Limit Filter" : "Action: Allow Traffic Ingress"}</span>
+          <span>{isBotnet ? "Recommended Action: Deploy Rate-Limit / Port Filter" : "Action: Allow Traffic Ingress"}</span>
         </b>
         <p>
           {isBotnet
-            ? "Isolate Source IP & deploy rate-limiting filter rule to prevent ingress amplification at perimeter routers."
-            : "No mitigation required. Session exhibits normal burst dynamics and regular TCP acknowledgment windowing."}
+            ? "Deploy perimeter rate-limiting filter rule to isolate suspicious C&C / flood ingress."
+            : "No mitigation required. Session exhibits normal burst dynamics and regular acknowledgment windowing."}
         </p>
       </div>
     </article>

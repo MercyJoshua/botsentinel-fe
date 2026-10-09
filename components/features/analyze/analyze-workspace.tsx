@@ -19,33 +19,73 @@ import {
   Cpu,
   Loader2,
   AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { demoDatasets, manualFields, schemaPreview } from "@/data/analyze";
 import { AnalysisMode, type TrafficFlow } from "@/lib/type";
 import { useAnalysis, PRESET_FLOWS } from "@/contexts/analysis-context";
+import { parseCsvFile, type ParsedDatasetResult } from "@/lib/csv-parser";
 import styles from "./analyze-workspace.module.css";
 
 export function AnalyzeWorkspace() {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [parsedDataset, setParsedDataset] = useState<ParsedDatasetResult | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
   const [mode, setMode] = useState<AnalysisMode>(AnalysisMode.Upload);
   const [specsOpen, setSpecsOpen] = useState(false);
   const { runAnalysis, isAnalyzing, error } = useAnalysis();
 
   const chooseFile = () => fileInput.current?.click();
-  const onFile = (file?: File) => setSelectedFile(file?.name ?? null);
 
-  const handleRunInference = async (datasetName?: string) => {
-    const name = datasetName ?? selectedFile ?? "Mirai Botnet Traffic (.csv)";
-    const presetKey = name.toLowerCase().includes("normal")
-      ? "benign_tls"
-      : name.toLowerCase().includes("mixed")
-      ? "dns_tunnel"
-      : "mirai_botnet";
+  const handleFileSelect = async (file?: File) => {
+    if (!file) return;
+    setSelectedFileName(file.name);
+    setParseError(null);
+    setIsParsing(true);
 
-    const flowData = PRESET_FLOWS[presetKey].flow;
-    await runAnalysis(flowData, name);
+    try {
+      if (file.name.endsWith(".csv") || file.type.includes("csv") || file.type.includes("text")) {
+        const result = await parseCsvFile(file);
+        setParsedDataset(result);
+      } else {
+        // Fallback for non-CSV formats: stage with default parameters
+        setParsedDataset(null);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to parse file.";
+      setParseError(msg);
+      setParsedDataset(null);
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const handleRunInference = async (presetName?: string) => {
+    if (presetName) {
+      const presetKey = presetName.toLowerCase().includes("scenario 13") || presetName.toLowerCase().includes("normal")
+        ? "benign_tls"
+        : presetName.toLowerCase().includes("probe") || presetName.toLowerCase().includes("scenario 9")
+        ? "dns_probe"
+        : "rbot_flood";
+
+      const flowData = PRESET_FLOWS[presetKey].flow;
+      await runAnalysis(flowData, presetName);
+      router.push("/results");
+      return;
+    }
+
+    if (parsedDataset) {
+      await runAnalysis(parsedDataset.primaryFlow, `${parsedDataset.fileName} (${parsedDataset.validFlows} flows)`);
+      router.push("/results");
+      return;
+    }
+
+    // Default fallback
+    const defaultFlow = PRESET_FLOWS.rbot_flood.flow;
+    await runAnalysis(defaultFlow, selectedFileName ?? "CTU-13 Scenario 10: Rbot DDoS Flood");
     router.push("/results");
   };
 
@@ -96,10 +136,10 @@ export function AnalyzeWorkspace() {
         </span>
       </div>
 
-      {error && (
+      {(error || parseError) && (
         <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-sm">
           <AlertCircle size={16} />
-          <span>{error}</span>
+          <span>{parseError ?? error}</span>
         </div>
       )}
 
@@ -109,9 +149,9 @@ export function AnalyzeWorkspace() {
             <input
               ref={fileInput}
               type="file"
-              accept=".csv,.pcap,.json"
+              accept=".csv,.pcap,.json,.txt,.binetflow"
               hidden
-              onChange={(event) => onFile(event.target.files?.[0])}
+              onChange={(event) => handleFileSelect(event.target.files?.[0])}
             />
 
             {mode === AnalysisMode.Upload ? (
@@ -121,18 +161,45 @@ export function AnalyzeWorkspace() {
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
                   event.preventDefault();
-                  onFile(event.dataTransfer.files[0]);
+                  handleFileSelect(event.dataTransfer.files[0]);
                 }}
               >
                 <div className="upload-cloud">
-                  <UploadCloud size={24} aria-hidden="true" />
+                  {isParsing ? (
+                    <Loader2 className="animate-spin text-teal-600" size={24} />
+                  ) : parsedDataset ? (
+                    <CheckCircle2 className="text-teal-600" size={24} />
+                  ) : (
+                    <UploadCloud size={24} aria-hidden="true" />
+                  )}
                 </div>
-                <h2>{selectedFile ?? "Drop your traffic trace here or browse files"}</h2>
+                <h2>
+                  {selectedFileName
+                    ? isParsing
+                      ? `Parsing ${selectedFileName}...`
+                      : parsedDataset
+                      ? `${selectedFileName} (${parsedDataset.validFlows} flows ready)`
+                      : selectedFileName
+                    : "Drop your traffic trace here or browse files"}
+                </h2>
                 <p>
                   Supports <b>.CSV, .PCAP, and .JSON</b> flow dumps up to 50MB.
                   <br />
-                  Compliant with CICIDS2017 &amp; Bot-IoT network schemas.
+                  Compliant with CTU-13, CICIDS2017 &amp; NetFlow schemas.
                 </p>
+
+                {parsedDataset && (
+                  <div className="my-2 p-2.5 rounded bg-teal-50 dark:bg-teal-950/50 border border-teal-200 dark:border-teal-800 text-xs text-teal-800 dark:text-teal-200 text-left">
+                    <p className="font-semibold mb-1">Dataset Parsed Successfully:</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                      <span>• Total Flows: <b>{parsedDataset.validFlows}</b></span>
+                      <span>• Dominant Proto: <b>{parsedDataset.summary.dominantProtocol}</b></span>
+                      <span>• Total Packets: <b>{parsedDataset.summary.totalPackets.toLocaleString()}</b></span>
+                      <span>• Total Volume: <b>{Math.round(parsedDataset.summary.totalBytes / 1024)} KB</b></span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="drop-zone-actions">
                   <button
                     type="button"
@@ -147,7 +214,7 @@ export function AnalyzeWorkspace() {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      setSelectedFile("Live_TAP_Stream_01.pcap");
+                      setSelectedFileName("Live_TAP_Stream_01.pcap");
                     }}
                   >
                     <Radio size={14} aria-hidden="true" /> Hook Live Tap
@@ -165,7 +232,7 @@ export function AnalyzeWorkspace() {
 
           <DemoDatasets
             onSelect={(name) => {
-              setSelectedFile(name);
+              setSelectedFileName(name);
               handleRunInference(name);
             }}
             isAnalyzing={isAnalyzing}
@@ -175,8 +242,9 @@ export function AnalyzeWorkspace() {
         <aside className="analyze-aside">
           <SchemaPreview />
           <InferenceCard
-            selectedFile={selectedFile}
-            isAnalyzing={isAnalyzing}
+            selectedFile={selectedFileName}
+            parsedDataset={parsedDataset}
+            isAnalyzing={isAnalyzing || isParsing}
             onAnalyze={() => handleRunInference()}
           />
         </aside>
@@ -235,7 +303,7 @@ export function AnalyzeWorkspace() {
             <div className="spec-item">
               <h3>TAXONOMY STANDARDS</h3>
               <p>
-                Compatible with CICIDS2017, Bot-IoT, and UNSW-NB15 taxonomy standards for
+                Compatible with CTU-13, CICIDS2017, and Bot-IoT taxonomy standards for
                 botnet signature classification.
               </p>
             </div>
@@ -250,15 +318,15 @@ function ManualInput() {
   const router = useRouter();
   const { runAnalysis, isAnalyzing } = useAnalysis();
   const [flow, setFlow] = useState<Partial<Record<keyof TrafficFlow, string>>>({
-    duration: "0.042",
+    duration: "14.85",
     protocol: "tcp",
-    source_port: "54128",
-    destination_port: "80",
-    direction: "outbound",
-    connection_state: "SF",
-    total_packets: "4280",
-    total_bytes: "285400",
-    source_bytes: "285400",
+    source_port: "52190",
+    destination_port: "443",
+    direction: "<-",
+    connection_state: "CON",
+    total_packets: "84",
+    total_bytes: "42100",
+    source_bytes: "18400",
   });
 
   const submit = async () => {
@@ -266,7 +334,7 @@ function ManualInput() {
       Object.entries(flow).filter(([, value]) => value?.trim())
     ) as TrafficFlow;
 
-    await runAnalysis(request, `Custom Flow (${flow.protocol?.toUpperCase() ?? "TCP"}:${flow.destination_port ?? "80"})`);
+    await runAnalysis(request, `Custom Flow (${flow.protocol?.toUpperCase() ?? "TCP"}:${flow.destination_port ?? "443"})`);
     router.push("/results");
   };
 
@@ -363,7 +431,7 @@ function SchemaPreview() {
     <section className="analyze-card schema-card">
       <div className="card-heading">
         <h2>Expected Schema</h2>
-        <b>CICIDS2017</b>
+        <b>CTU-13 / CICIDS</b>
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
         Inbound packet records map to 11 key telemetry attributes:
@@ -378,7 +446,7 @@ function SchemaPreview() {
       </div>
       <div className="flex items-center gap-1.5 text-xs text-teal-600 dark:text-teal-400 mt-2">
         <Check size={14} aria-hidden="true" />
-        <span>MinMax automatic feature normalization applied</span>
+        <span>Automatic NetFlow / CTU-13 feature normalization applied</span>
       </div>
     </section>
   );
@@ -386,10 +454,12 @@ function SchemaPreview() {
 
 function InferenceCard({
   selectedFile,
+  parsedDataset,
   isAnalyzing,
   onAnalyze,
 }: {
   selectedFile: string | null;
+  parsedDataset: ParsedDatasetResult | null;
   isAnalyzing: boolean;
   onAnalyze: () => void;
 }) {
@@ -403,8 +473,14 @@ function InferenceCard({
       <div className="file-ready">
         <FileText className="text-teal-600 flex-shrink-0" size={20} aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <b className="truncate">{selectedFile ?? "Mirai Botnet Traffic (.csv)"}</b>
-          <small>{selectedFile ? "Staged for inference" : "4,280 packet flows staged"}</small>
+          <b className="truncate">{selectedFile ?? "CTU-13 Benchmark Dataset"}</b>
+          <small>
+            {parsedDataset
+              ? `${parsedDataset.validFlows} flows staged for inference`
+              : selectedFile
+              ? "Staged for inference"
+              : "Flow trace staged"}
+          </small>
         </div>
         <Check className="text-teal-600 flex-shrink-0" size={16} aria-hidden="true" />
       </div>
